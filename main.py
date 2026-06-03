@@ -31,8 +31,9 @@ MAX_PUMP = 200
 # ----------------------------
 
 class VisualPreset:
-    def __init__(self, analysis):
+    def __init__(self, analysis, sketch):
         self.analysis = analysis
+        self.sketch = sketch
         self.effects = []
 
 class Preset1(VisualPreset):
@@ -49,8 +50,7 @@ class Preset1(VisualPreset):
         self.main_effects = [e for e in self.effects if e.layer_hint != LAYER_TOP]
         self.top_effects = [e for e in self.effects if e.layer_hint == LAYER_TOP]
         for effect in self.effects:
-            effect.setup(self)
-
+            effect.setup(self.sketch)
 
 
 class Preset2(VisualPreset):
@@ -65,13 +65,13 @@ class Preset2(VisualPreset):
         self.main_effects = [e for e in self.effects if e.layer_hint != LAYER_TOP]
         self.top_effects = [e for e in self.effects if e.layer_hint == LAYER_TOP]
         for effect in self.effects:
-            effect.setup(self)
+            effect.setup(self.sketch)
 
 
 class MusicVisualiser(py5.Sketch):
 
     def settings(self):
-        self.size(WIDTH, HEIGHT, self.P3D)
+        self.size(WIDTH, HEIGHT, self.P2D)
 
     def setup(self):
         # audio set up ONCE — never rebuilt on a visual switch
@@ -83,7 +83,7 @@ class MusicVisualiser(py5.Sketch):
 
 
     def go_to_next_preset(self):
-        self.preset = random.choice([Preset1, Preset2])(self.analysis)
+        self.preset = random.choice([Preset1, Preset2])(self.analysis, self)
         self.preset.build_effects()
 
     def draw(self):
