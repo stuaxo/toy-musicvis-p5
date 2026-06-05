@@ -16,19 +16,19 @@ import py5
 from music import AudioSampler, AudioAnalyse
 from visuals import ScaledBackground, RadialFlare, GlowCircle, GlowCube, LAYER_TOP
 
-# ---------- config ----------
+# Canvas params
 WIDTH = 600
 HEIGHT = 600
 
-# audio — GAIN is calibrated to input level, so it is NOT randomised
+# audio
 SAMPLERATE = 44100
 CHUNK_SIZE = 1024
 GAIN = 0.02          # raise if reaction is weak, lower if it pins to max
 
-# structural circle params — kept stable across rolls
+# vis
 BASE_RADIUS = 100
 MAX_PUMP = 200
-# ----------------------------
+
 
 class VisualPreset:
     def __init__(self, analysis):
