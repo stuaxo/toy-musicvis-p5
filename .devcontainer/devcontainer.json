@@ -8,16 +8,24 @@
     "--group-add=video",
     "--group-add=render"
   ],
-  "mounts": [
+"mounts": [
+    // X11 Graphics Passthrough
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.Xauthority,target=/home/vscode/.Xauthority,type=bind,consistency=cached",
-    "source=/run/user/1000/pulse,target=/run/user/1000/pulse,type=bind,consistency=cached"
+    
+    // Sensible Audio Passthrough (Dynamic local runtime dir mapping)
+    "source=${localEnv:XDG_RUNTIME_DIR}/pulse,target=/run/user/1000/pulse,type=bind,consistency=cached"
   ],
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
+    "XAUTHORITY": "/home/vscode/.Xauthority",
+    
+    // Direct Pulse to our standard mapped path inside the container
     "PULSE_SERVER": "unix:/run/user/1000/pulse/native",
-    "JAVA_TOOL_OPTIONS": "-Djavax.accessibility.assistive_technologies= -Djava.awt.headless=false",
-    "XAUTHORITY": "/home/vscode/.Xauthority"
+    
+    // Hardware Acceleration / Render params
+    "LIBGL_ALWAYS_SOFTWARE": "0", 
+    "JAVA_TOOL_OPTIONS": "-Djavax.accessibility.assistive_technologies= -Djava.awt.headless=false"
   },
   "customizations": {
     "vscode": {
@@ -28,6 +36,7 @@
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.terminal.activateEnvInTerminal": false,
         "editor.formatOnSave": true
       }
     }

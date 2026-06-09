@@ -78,19 +78,41 @@ class MusicVisualiser(py5.Sketch):
         self.size(WIDTH, HEIGHT, self.P3D)
 
     def setup(self):
-        self.background(15)
+        self.main_buf = self.create_graphics(WIDTH, HEIGHT, self.P3D)
+        self.main_buf.begin_draw()
+        self.main_buf.background(15)
+        self.main_buf.end_draw()
         self.go_to_next_preset()
 
-
     def go_to_next_preset(self):
+        if hasattr(self, 'preset'):
+            for effect in self.preset.effects:
+                effect.end(self)
+        # clear accumulated main-layer content so it doesn't bleed into the new preset
+        self.main_buf.begin_draw()
+        self.main_buf.background(15)
+        self.main_buf.end_draw()
         self.preset = random.choice([Preset1, Preset2])(self.analysis)
         self.preset.build_effects()
 
-    def draw(self):
+    def update(self):
+        self.analysis.update()
         for effect in self.preset.effects:
             effect.update(self)
+
+    def draw(self):
+        self.update()
+        self.main_buf.begin_draw()
         for effect in self.preset.main_effects:
-            effect.draw(self, self)
+            effect.draw(self, self.main_buf)
+        self.main_buf.end_draw()
+        # clear sketch (colour + P3D depth buffer) then blit main layer;
+        # disable depth test so the 2D image doesn't pollute the depth buffer
+        # before 3D top-layer effects render
+        self.background(15)
+        self.hint(self.DISABLE_DEPTH_TEST)
+        self.image(self.main_buf, 0, 0)
+        self.hint(self.ENABLE_DEPTH_TEST)
         for effect in self.preset.top_effects:
             effect.draw(self, self)
 

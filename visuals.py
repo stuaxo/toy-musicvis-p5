@@ -38,6 +38,9 @@ class VisualEffect:
     def draw(self, sketch, ctx):
         pass
 
+    def end(self, sketch):
+        pass
+
 
 class ScaledBackground(VisualEffect):
     """Milkdrop-style feedback.
@@ -151,8 +154,6 @@ class GlowCircle(VisualEffect):
         self.treble = 0.0
 
     def update(self, sketch):
-        # this effect drives the once-per-frame FFT for all consumers
-        self.analysis.update()
         self.bass = self.analysis.bass
         self.treble = self.analysis.treble
 
@@ -209,18 +210,12 @@ class GlowCube(VisualEffect):
         self.treble = 0.0
 
     def update(self, sketch):
-        self.analysis.update()
         self.bass = self.analysis.bass
         self.treble = self.analysis.treble
         self.yaw += self.yaw_speed
         self.pitch += self.pitch_speed
 
     def draw(self, sketch, ctx):
-        # Clear colour + depth buffer so the cube has a clean 3D slate.
-        # ScaledBackground feedback conflicts with the P3D depth buffer;
-        # keeping them separate (Preset2 has no ScaledBackground) is correct.
-        ctx.background(15)
-
         cx, cy = sketch.width / 2, sketch.height / 2
         side = (self.base_size + min(self.bass, self.max_pump)) * 2
         treble_t = min(self.treble / 100.0, 1.0)
