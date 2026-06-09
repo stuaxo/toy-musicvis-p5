@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Toy music visualiser built with py5"
 requires-python = ">=3.11"
 dependencies = [
+    "cffi<2",
     "py5",
     "sounddevice",
     "numpy",

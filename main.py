@@ -70,14 +70,14 @@ class Preset2(VisualPreset):
 
 class MusicVisualiser(py5.Sketch):
 
+    def __init__(self, analysis):
+        super().__init__()
+        self.analysis = analysis
+
     def settings(self):
         self.size(WIDTH, HEIGHT, self.P3D)
 
     def setup(self):
-        # audio set up ONCE — never rebuilt on a visual switch
-        self.sampler = AudioSampler(samplerate=SAMPLERATE, chunk_size=CHUNK_SIZE)
-        self.analysis = AudioAnalyse(
-            self.sampler, bass=True, mid=True, treble=True, gain=GAIN)
         self.background(15)
         self.go_to_next_preset()
 
@@ -99,11 +99,16 @@ class MusicVisualiser(py5.Sketch):
             self.go_to_next_preset()
 
     def exiting(self):
-        self.sampler.close()
+        self.analysis.sampler.close()
 
 
 def main():
-    sketch = MusicVisualiser()
+    # Audio must be initialised on the main Python thread before the JVM
+    # timer thread starts calling setup() — sounddevice's cffi callbacks
+    # crash when first registered from within a JPype-proxied JVM thread.
+    sampler = AudioSampler(samplerate=SAMPLERATE, chunk_size=CHUNK_SIZE)
+    analysis = AudioAnalyse(sampler, bass=True, mid=True, treble=True, gain=GAIN)
+    sketch = MusicVisualiser(analysis)
     sketch.run_sketch()
 
 

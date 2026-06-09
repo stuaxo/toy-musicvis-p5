@@ -1,12 +1,16 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.11-slim-bookworm
 
 # System packages: JVM (py5), audio, X11/OpenGL (py5 renderer), fonts, tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-client \
     openjdk-17-jdk \
     portaudio19-dev \
+    libasound2-plugins \
     libsndfile1 \
-    x11-apps \
+    libgl1-mesa-dri \
     libgl1 \
+    libegl1 \
+    libglu1-mesa \
     libxi6 \
     libxtst6 \
     libxrender1 \
@@ -25,10 +29,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
-    py5 \
-    sounddevice \
-    numpy
+# Install uv; packages are installed from pyproject.toml via postCreateCommand
+RUN pip install --no-cache-dir uv
 
 ARG USERNAME=vscode
 ARG USER_UID=1000
@@ -40,7 +42,9 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
     && apt-get install -y --no-install-recommends sudo \
     && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
     && chmod 0440 /etc/sudoers.d/${USERNAME} \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 109 render 2>/dev/null || true \
+    && usermod -aG video,render,audio ${USERNAME}
 
 USER ${USERNAME}
 
