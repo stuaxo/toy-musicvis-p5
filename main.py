@@ -16,19 +16,19 @@ import py5
 from music import AudioSampler, AudioAnalyse
 from visuals import ScaledBackground, RadialFlare, GlowCircle, GlowCube, LAYER_TOP
 
-# ---------- config ----------
+# Canvas params
 WIDTH = 600
 HEIGHT = 600
 
-# audio — GAIN is calibrated to input level, so it is NOT randomised
+# audio
 SAMPLERATE = 44100
 CHUNK_SIZE = 1024
 GAIN = 0.02          # raise if reaction is weak, lower if it pins to max
 
-# structural circle params — kept stable across rolls
+# vis
 BASE_RADIUS = 100
 MAX_PUMP = 200
-# ----------------------------
+
 
 class VisualPreset:
     def __init__(self, analysis, sketch):
@@ -70,14 +70,14 @@ class Preset2(VisualPreset):
 
 class MusicVisualiser(py5.Sketch):
 
+    def __init__(self, analysis):
+        super().__init__()
+        self.analysis = analysis
+
     def settings(self):
         self.size(WIDTH, HEIGHT, self.P2D)
 
     def setup(self):
-        # audio set up ONCE — never rebuilt on a visual switch
-        self.sampler = AudioSampler(samplerate=SAMPLERATE, chunk_size=CHUNK_SIZE)
-        self.analysis = AudioAnalyse(
-            self.sampler, bass=True, mid=True, treble=True, gain=GAIN)
         self.background(15)
         self.go_to_next_preset()
 
@@ -99,11 +99,16 @@ class MusicVisualiser(py5.Sketch):
             self.go_to_next_preset()
 
     def exiting(self):
-        self.sampler.close()
+        self.analysis.sampler.close()
 
 
 def main():
-    sketch = MusicVisualiser()
+    # Audio must be initialised on the main Python thread before the JVM
+    # timer thread starts calling setup() — sounddevice's cffi callbacks
+    # crash when first registered from within a JPype-proxied JVM thread.
+    sampler = AudioSampler(samplerate=SAMPLERATE, chunk_size=CHUNK_SIZE)
+    analysis = AudioAnalyse(sampler, bass=True, mid=True, treble=True, gain=GAIN)
+    sketch = MusicVisualiser(analysis)
     sketch.run_sketch()
 
 

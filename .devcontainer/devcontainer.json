@@ -1,0 +1,37 @@
+{
+  "name": "py5 Audio Visualiser",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--device=/dev/dri",
+    "--group-add=video",
+    "--group-add=render"
+  ],
+  "mounts": [
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.Xauthority,target=/home/vscode/.Xauthority,type=bind,consistency=cached",
+    "source=/run/user/1000/pulse,target=/run/user/1000/pulse,type=bind,consistency=cached"
+  ],
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "PULSE_SERVER": "unix:/run/user/1000/pulse/native",
+    "JAVA_TOOL_OPTIONS": "-Djavax.accessibility.assistive_technologies= -Djava.awt.headless=false",
+    "XAUTHORITY": "/home/vscode/.Xauthority"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.pylint",
+        "anthropic.claude-code"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "sudo uv pip install --system -e . && python -c \"import py5_tools; print(py5_tools.get_jvm_debug_info())\""
+}
