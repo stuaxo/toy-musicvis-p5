@@ -10,11 +10,12 @@ fresh roll). The audio pipeline is created once and survives switches.
 """
 
 import random
+from datetime import datetime
 
 import py5
 
 from music import AudioSampler, AudioAnalyse
-from visuals import ScaledBackground, RadialFlare, GlowCircle, GlowCube, LAYER_TOP
+from visuals import FeedbackBuffer, ZoomFadeFeedback, RadialFlare, GlowCircle, GlowCube, LAYER_TOP
 
 # Canvas params
 WIDTH = 600
@@ -23,7 +24,8 @@ HEIGHT = 600
 # audio
 SAMPLERATE = 44100
 CHUNK_SIZE = 1024
-GAIN = 0.02          # raise if reaction is weak, lower if it pins to max
+GAIN = 0.02
+""" Raise if reaction is weak, lower if it pins to max """
 
 # vis
 BASE_RADIUS = 100
@@ -34,36 +36,44 @@ class VisualPreset:
     def __init__(self, analysis):
         self.analysis = analysis
         self.effects = []
+        self.feedback_effects = []
+        self.composite_effects = []
+        self.screen_effects = []
 
 class Preset1(VisualPreset):
     def build_effects(self):
         """(Re)build the visual layer. Effects with None params self-randomise,
         so each call produces a fresh look. Audio is left untouched."""
+        self.feedback_effects = [ZoomFadeFeedback()]
         self.effects = [
-            ScaledBackground(),                 # zoom/fade -> random
-            RadialFlare(self.analysis),         # all flare params -> random
+            RadialFlare(self.analysis),
             GlowCircle(self.analysis,
-                      base_radius=BASE_RADIUS,  # pinned structural params
-                      max_pump=MAX_PUMP),       # num_spikes/spike_length -> random
+                      base_radius=BASE_RADIUS,
+                      max_pump=MAX_PUMP),
         ]
-        self.main_effects = [e for e in self.effects if e.layer_hint != LAYER_TOP]
-        self.top_effects = [e for e in self.effects if e.layer_hint == LAYER_TOP]
+        self.composite_effects = sorted(
+            [e for e in self.effects if e.feeds_back],
+            key=lambda e: e.layer_hint == LAYER_TOP,
+        )
+        self.screen_effects = [e for e in self.effects if not e.feeds_back]
         for effect in self.effects:
             effect.setup(self)
 
 
-
 class Preset2(VisualPreset):
     def build_effects(self):
+        self.feedback_effects = [ZoomFadeFeedback()]
         self.effects = [
-            ScaledBackground(),
             RadialFlare(self.analysis),
             GlowCube(self.analysis,
                      base_size=80,
                      max_pump=100),
         ]
-        self.main_effects = [e for e in self.effects if e.layer_hint != LAYER_TOP]
-        self.top_effects = [e for e in self.effects if e.layer_hint == LAYER_TOP]
+        self.composite_effects = sorted(
+            [e for e in self.effects if e.feeds_back],
+            key=lambda e: e.layer_hint == LAYER_TOP,
+        )
+        self.screen_effects = [e for e in self.effects if not e.feeds_back]
         for effect in self.effects:
             effect.setup(self)
 
@@ -78,20 +88,14 @@ class MusicVisualiser(py5.Sketch):
         self.size(WIDTH, HEIGHT, self.P3D)
 
     def setup(self):
-        self.main_buf = self.create_graphics(WIDTH, HEIGHT, self.P3D)
-        self.main_buf.begin_draw()
-        self.main_buf.background(15)
-        self.main_buf.end_draw()
+        self.feedback = FeedbackBuffer(self, WIDTH, HEIGHT, self.P3D)
         self.go_to_next_preset()
 
     def go_to_next_preset(self):
         if hasattr(self, 'preset'):
             for effect in self.preset.effects:
                 effect.end(self)
-        # clear accumulated main-layer content so it doesn't bleed into the new preset
-        self.main_buf.begin_draw()
-        self.main_buf.background(15)
-        self.main_buf.end_draw()
+        self.feedback.clear()
         self.preset = random.choice([Preset1, Preset2])(self.analysis)
         self.preset.build_effects()
 
@@ -102,23 +106,42 @@ class MusicVisualiser(py5.Sketch):
 
     def draw(self):
         self.update()
-        self.main_buf.begin_draw()
-        for effect in self.preset.main_effects:
-            effect.draw(self, self.main_buf)
-        self.main_buf.end_draw()
-        # clear sketch (colour + P3D depth buffer) then blit main layer;
-        # disable depth test so the 2D image doesn't pollute the depth buffer
-        # before 3D top-layer effects render
+        
+        with self.feedback.composite(self, self.preset.feedback_effects) as ctx:
+            for effect in self.preset.composite_effects:
+                effect.draw(self, ctx)
+
         self.background(15)
-        self.hint(self.DISABLE_DEPTH_TEST)
-        self.image(self.main_buf, 0, 0)
-        self.hint(self.ENABLE_DEPTH_TEST)
-        for effect in self.preset.top_effects:
+        self.feedback.display(self)
+
+        for effect in self.preset.screen_effects:
             effect.draw(self, self)
+
+    def save_layers(self):
+        prefix = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        self.feedback.prev_buf.save(f"{prefix}_1_feedback.png")
+
+        effects_buf = self.create_graphics(self.width, self.height, self.P3D)
+        effects_buf.begin_draw()
+        effects_buf.background(0)
+        for effect in self.preset.composite_effects + self.preset.screen_effects:
+            effect.draw(self, effects_buf)
+        effects_buf.end_draw()
+        effects_buf.save(f"{prefix}_2_effects.png")
+
+        self.save_frame(f"{prefix}_3_full.png")
+        print(f"Saved layers: {prefix}_*.png")
 
     def key_pressed(self):
         if self.key in 'nN ':
             self.go_to_next_preset()
+        elif self.key in 'sS':
+            filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            self.save_frame(filename)
+            print(f"Saved {filename}")
+        elif self.key in 'dD':
+            self.save_layers()
 
     def exiting(self):
         self.analysis.sampler.close()

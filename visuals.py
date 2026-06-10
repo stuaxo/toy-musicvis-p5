@@ -15,6 +15,7 @@ actual arrangement. Effects that don't care inherit the default (main).
 """
 
 import random
+from contextlib import contextmanager
 
 import py5
 
@@ -23,11 +24,109 @@ LAYER_MAIN = "main"   # feeds the feedback loop (caught in the grab + trails)
 LAYER_TOP = "top"     # drawn fresh on top each frame, never grabbed
 
 
+class FeedbackBuffer:
+    """Generic double-buffer manager for ping-ponging frame states.
+
+    This architecture relies on the "Double Buffering" (or Ping-Pong) 
+    graphics pattern. It prevents visual tearing and hardware pipeline 
+    stalls that occur when attempting to read from and write to the 
+    same GPU texture simultaneously.
+
+    Further Reading & Context:
+    - Game Programming Patterns (Double Buffer):
+      https://gameprogrammingpatterns.com/double-buffer.html
+    - OpenGL Ping-Ponging (LearnOpenGL):
+      https://learnopengl.com/Advanced-Lighting/Bloom
+    """
+
+    def __init__(self, sketch, width, height, renderer):
+        # Tied directly to the sketch instance to inherit the OpenGL context
+        self.buf_a = sketch.create_graphics(width, height, renderer)
+        self.buf_b = sketch.create_graphics(width, height, renderer)
+        self.curr_buf = self.buf_a
+        self.prev_buf = self.buf_b
+        self.clear()
+
+    def clear(self):
+        """Wipe accumulated trails."""
+        for buf in (self.buf_a, self.buf_b):
+            buf.begin_draw()
+            buf.background(15)
+            buf.end_draw()
+
+    @contextmanager
+    def composite(self, sketch, feedback_effects):
+        """Prepares the historical texture, yields for drawing, then swaps buffers."""
+        self.curr_buf.begin_draw()
+        
+        # --- CRITICAL FIX ---
+        # Clear the color and depth buffers for the fresh frame pass
+        # so the GPU doesn't depth-clip our feedback history!
+        self.curr_buf.background(15)
+        
+        # Sequentially apply feedback/post-processing effects
+        for effect in feedback_effects:
+            effect.apply(sketch, self.prev_buf, self.curr_buf)
+
+        try:
+            yield self.curr_buf
+        finally:
+            self.curr_buf.end_draw()
+            # Ping-pong swap
+            self.curr_buf, self.prev_buf = self.prev_buf, self.curr_buf
+
+    def display(self, sketch):
+        """Blit the completed layer to the main sketch canvas safely."""
+        sketch.hint(sketch.DISABLE_DEPTH_TEST)
+        sketch.image(self.prev_buf, 0, 0)
+        sketch.hint(sketch.ENABLE_DEPTH_TEST)
+
+
+class FeedbackEffect:
+    """Base class for effects modifying the historical accumulation stream."""
+    def setup(self, preset):
+        pass
+    def update(self, sketch):
+        pass
+    def apply(self, sketch, prev_buf, curr_buf):
+        pass
+
+
+class ZoomFadeFeedback(FeedbackEffect):
+    """Classic Milkdrop-style expanding trail effect."""
+
+    def __init__(self, zoom=None, fade=None):
+        self.zoom = zoom if zoom is not None else random.uniform(1.006, 1.018)
+        self.fade = fade if fade is not None else random.randint(14, 26)
+
+    def apply(self, sketch, prev_buf, curr_buf):
+        cx, cy = curr_buf.width / 2, curr_buf.height / 2
+
+        # Matrix isolation lives inside the effect, protecting the pipeline
+        curr_buf.push_matrix()
+        curr_buf.translate(cx, cy)
+        curr_buf.scale(self.zoom)
+        curr_buf.translate(-cx, -cy)
+
+        # Disable the depth test so that 3D objects aren't clipped by the background
+        curr_buf.hint(curr_buf.DISABLE_DEPTH_TEST)
+
+        curr_buf.tint(255, 255 - self.fade)
+        curr_buf.image(prev_buf, 0, 0)
+        curr_buf.no_tint()
+
+        curr_buf.hint(curr_buf.ENABLE_DEPTH_TEST)
+
+        curr_buf.pop_matrix()
+
+
+
 class VisualEffect:
     """Base class. Effects override whichever phases they need and may
     set a layer_hint to suggest their place in the stack."""
 
     layer_hint = LAYER_MAIN
+    feeds_back = True
 
     def setup(self, sketch):
         pass
@@ -40,37 +139,6 @@ class VisualEffect:
 
     def end(self, sketch):
         pass
-
-
-class ScaledBackground(VisualEffect):
-    """Milkdrop-style feedback.
-
-    Snapshots the current canvas, draws it back scaled up slightly from
-    the centre, and dims it a touch — so motion leaves trails that
-    expand outward and fade. No background() clear; that's what lets the
-    previous frame survive to be re-grabbed.
-    """
-
-    def __init__(self, zoom=None, fade=None):
-        # None means "pick a random value in a tasteful range"
-        if zoom is None:
-            zoom = random.uniform(1.006, 1.018)   # tight: avoids white-out
-        if fade is None:
-            fade = random.randint(14, 26)
-        self.zoom = zoom    # >1.0 zooms out; 1.005 slow creep, 1.03 rush
-        self.fade = fade    # alpha of dimming overlay; higher = shorter trails
-
-    def draw(self, sketch, ctx):
-        cx, cy = sketch.width / 2, sketch.height / 2
-        snapshot = ctx.get_pixels()
-        ctx.push_matrix()
-        ctx.translate(cx, cy)
-        ctx.scale(self.zoom)
-        ctx.translate(-cx, -cy)
-        ctx.tint(255, 255 - self.fade)
-        ctx.image(snapshot, 0, 0)
-        ctx.pop_matrix()
-        ctx.no_tint()
 
 
 class RadialFlare(VisualEffect):
@@ -127,6 +195,7 @@ class RadialFlare(VisualEffect):
                 ctx.fill(150, 200, 255, alpha)
                 ctx.circle(x, y, size)
 
+    
 
 class GlowCircle(VisualEffect):
     """Bass-pumped glow core with a treble-reactive jagged rim.
@@ -136,6 +205,7 @@ class GlowCircle(VisualEffect):
     """
 
     layer_hint = LAYER_TOP
+    feeds_back = True
 
     def __init__(self, analysis, base_radius=100, max_pump=200,
                  num_spikes=None, spike_length=None):
@@ -192,6 +262,7 @@ class GlowCube(VisualEffect):
     """
 
     layer_hint = LAYER_TOP
+    feeds_back = True
 
     def __init__(self, analysis, base_size=80, max_pump=100,
                  yaw_speed=None, pitch_speed=None):
