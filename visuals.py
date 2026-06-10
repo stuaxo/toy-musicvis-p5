@@ -280,6 +280,11 @@ class GlowCube(VisualEffect):
         self.bass = 0.0
         self.treble = 0.0
 
+    def setup(self, sketch):
+        # Offscreen P3D buffer — keeps its depth buffer separate from the
+        # main 2D canvas so ScaledBackground feedback is unaffected.
+        self.pg = sketch.create_graphics(sketch.width, sketch.height, sketch.P3D)
+
     def update(self, sketch):
         self.bass = self.analysis.bass
         self.treble = self.analysis.treble
@@ -291,18 +296,20 @@ class GlowCube(VisualEffect):
         side = (self.base_size + min(self.bass, self.max_pump)) * 2
         treble_t = min(self.treble / 100.0, 1.0)
 
-        # Light in world space — above-front of the canvas centre
-        ctx.ambient_light(40, 40, 100)
-        ctx.point_light(220, 230, 255, cx, cy - 300, 500)
+        self.pg.begin_draw()
+        self.pg.clear()  # transparent + depth reset
+        self.pg.ambient_light(40, 40, 100)
+        self.pg.point_light(220, 230, 255, cx, cy - 300, 500)
+        self.pg.push_matrix()
+        self.pg.translate(cx, cy, 0)
+        self.pg.rotate_x(self.pitch)
+        self.pg.rotate_y(self.yaw)
+        self.pg.fill(80, 130, 255)
+        self.pg.stroke(int(180 + 75 * treble_t), 220, 255)
+        self.pg.stroke_weight(1)
+        self.pg.box(side)
+        self.pg.pop_matrix()
+        self.pg.no_lights()
+        self.pg.end_draw()
 
-        ctx.push_matrix()
-        ctx.translate(cx, cy, 0)
-        ctx.rotate_x(self.pitch)
-        ctx.rotate_y(self.yaw)
-        ctx.fill(80, 130, 255)
-        ctx.stroke(int(180 + 75 * treble_t), 220, 255)
-        ctx.stroke_weight(1)
-        ctx.box(side)
-        ctx.pop_matrix()
-
-        ctx.no_lights()
+        ctx.image(self.pg, 0, 0)

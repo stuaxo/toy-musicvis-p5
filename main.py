@@ -33,8 +33,9 @@ MAX_PUMP = 200
 
 
 class VisualPreset:
-    def __init__(self, analysis):
+    def __init__(self, analysis, sketch):
         self.analysis = analysis
+        self.sketch = sketch
         self.effects = []
         self.feedback_effects = []
         self.composite_effects = []
@@ -57,8 +58,7 @@ class Preset1(VisualPreset):
         )
         self.screen_effects = [e for e in self.effects if not e.feeds_back]
         for effect in self.effects:
-            effect.setup(self)
-
+            effect.setup(self.sketch)
 
 class Preset2(VisualPreset):
     def build_effects(self):
@@ -75,7 +75,7 @@ class Preset2(VisualPreset):
         )
         self.screen_effects = [e for e in self.effects if not e.feeds_back]
         for effect in self.effects:
-            effect.setup(self)
+            effect.setup(self.sketch)
 
 
 class MusicVisualiser(py5.Sketch):
@@ -85,7 +85,7 @@ class MusicVisualiser(py5.Sketch):
         self.analysis = analysis
 
     def settings(self):
-        self.size(WIDTH, HEIGHT, self.P3D)
+        self.size(WIDTH, HEIGHT, self.P2D)
 
     def setup(self):
         self.feedback = FeedbackBuffer(self, WIDTH, HEIGHT, self.P3D)
